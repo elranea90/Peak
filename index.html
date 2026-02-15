@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salón 1</title>
+
+<style>
+body{
+margin:0;
+font-family:system-ui,Arial;
+height:100vh;
+background:
+linear-gradient(rgba(0,0,0,.65),rgba(0,0,0,.65)),
+url("https://images.unsplash.com/photo-1550547660-d9450f859349");
+background-size:cover;
+background-position:center;
+color:#fff;
+overflow:hidden;
+}
+
+/* MODALES */
+.modal{
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+width:90%;
+max-width:360px;
+background:#111;
+border-radius:22px;
+padding:26px;
+text-align:center;
+box-shadow:0 20px 45px rgba(0,0,0,.8);
+}
+
+input{
+width:100%;
+padding:14px;
+font-size:16px;
+border-radius:14px;
+border:none;
+margin-bottom:14px;
+}
+
+button{
+width:100%;
+padding:14px;
+font-size:16px;
+font-weight:900;
+border-radius:16px;
+border:none;
+cursor:pointer;
+margin-top:10px;
+}
+
+.ok{background:#ffc200;color:#111}
+.cash{background:#ff5555;color:#fff}
+.cardPay{background:#ffc200;color:#111}
+
+/* BARRA */
+.bottomBar{
+position:fixed;
+bottom:0;
+left:0;
+right:0;
+background:#111;
+padding:16px;
+text-align:center;
+font-size:17px;
+font-weight:900;
+}
+.action{background:#ffc200;color:#111;cursor:pointer}
+
+/* OVERLAY ESTADO */
+.estadoOverlay{
+position:fixed;
+inset:0;
+background:#000;
+z-index:999;
+display:none;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+padding:30px;
+}
+
+.estadoNombre{font-size:34px;font-weight:900;margin-bottom:16px}
+.estadoIcon{font-size:80px;margin-bottom:14px}
+.estadoTexto{font-size:40px;font-weight:900;line-height:1.1}
+.estadoSub{margin-top:20px;font-size:22px}
+
+.spinner{
+width:90px;height:90px;
+border:8px solid #333;
+border-top:8px solid #ffc200;
+border-radius:50%;
+animation:spin 1s linear infinite;
+margin:20px auto;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* AVISADOR */
+.avisadorActivo{
+background:#0a7d2c;
+animation:pulse 1.2s infinite;
+}
+@keyframes pulse{
+0%{box-shadow:0 0 0 0 rgba(0,255,0,.7)}
+70%{box-shadow:0 0 0 35px rgba(0,255,0,0)}
+100%{box-shadow:0 0 0 0 rgba(0,255,0,0)}
+}
+
+.avisadorBox{
+width:260px;
+height:160px;
+border-radius:22px;
+background:#00d26a;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:32px;
+font-weight:900;
+color:#000;
+margin:20px auto;
+}
+
+.personBtn{
+background:#222;
+color:#fff;
+margin:6px 0;
+}
+</style>
+</head>
+
+<body>
+
+<!-- PASO NOMBRE -->
+<div id="stepName" class="modal">
+<h1>Hola 👋</h1>
+<p>¿Cómo te llamas?</p>
+<input id="nombre" placeholder="Tu nombre">
+<button class="ok" onclick="goPago()">OK</button>
+</div>
+
+<!-- PASO PAGO -->
+<div id="stepPago" class="modal" style="display:none">
+<h1>¿Cómo prefieres pagar?</h1>
+<button class="cash" onclick="crearPedido('EFECTIVO')">💶 Efectivo / barra</button>
+<button class="cardPay" onclick="crearPedido('TARJETA')">💳 Pago online</button>
+</div>
+
+<div id="bottomBar" class="bottomBar">
+🕒 Aún no hay pedidos activos en esta mesa
+</div>
+
+<div id="estadoOverlay" class="estadoOverlay">
+
+<div id="selectPersona" style="display:none">
+<h1>¿Quién eres?</h1>
+<div id="personList"></div>
+</div>
+
+<div id="estadoView" style="display:none;text-align:center">
+<div id="estadoNombre" class="estadoNombre"></div>
+<div id="estadoIcon" class="estadoIcon"></div>
+<div id="estadoTexto" class="estadoTexto"></div>
+<div id="spinner" class="spinner" style="display:none"></div>
+<div id="estadoSub" class="estadoSub"></div>
+
+<div id="avisadorBox" class="avisadorBox" style="display:none">
+AVISADOR PEAK
+</div>
+
+<button onclick="activarAvisador()">🟢 ACTIVAR MODO AVISADOR</button>
+<button onclick="pedirAvisadorFisico()">🔔 PREFIERO AVISADOR FÍSICO</button>
+<button onclick="ocultarEstado()" style="background:#333;color:#fff">OCULTAR</button>
+</div>
+
+</div>
+
+<audio id="beep">
+<source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg">
+</audio>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+/* FIREBASE */
+const app = initializeApp({
+apiKey:"AIzaSyA4WVfgRW5oyZQLBFA0ZzbAwX9PF5dhJSU",
+authDomain:"peakturnos.firebaseapp.com",
+databaseURL:"https://peakturnos-default-rtdb.europe-west1.firebasedatabase.app",
+projectId:"peakturnos"
+});
+const db = getDatabase(app);
+
+const MESA = "Salón 1";
+let pedidoActual = null;
+let nombreActual = "";
+let avisadorActivo = false;
+
+/* VIBRACIÓN */
+function vibrarAvisador(){
+  if(navigator.vibrate){
+    navigator.vibrate([800,300,800,300,1200]);
+  }
+}
+
+/* FLUJO */
+window.goPago = ()=>{
+  const n = nombre.value.trim();
+  if(!n) return alert("Escribe tu nombre");
+  nombreActual = n.toUpperCase();
+  stepName.style.display="none";
+  stepPago.style.display="block";
+};
+
+window.crearPedido = async(tipo)=>{
+  const key = `🪑 ${MESA} · ${nombreActual} 🍔`;
+  await set(ref(db,"mesas/"+key),{
+    estado: tipo==="EFECTIVO" ? "pendiente" : "preparando",
+    timestamp: Date.now(),
+    cliente: nombreActual,
+    pago: tipo
+  });
+};
+
+/* BARRA */
+onValue(ref(db,"mesas"),snap=>{
+  const data = snap.val() || {};
+  const pedidos = Object.keys(data).filter(k=>k.startsWith("🪑 "+MESA));
+  if(pedidos.length){
+    bottomBar.textContent="👀 Ver estado de mi pedido";
+    bottomBar.classList.add("action");
+    bottomBar.onclick=()=>mostrarSelector(pedidos);
+  }else{
+    bottomBar.textContent="🕒 Aún no hay pedidos activos en esta mesa";
+    bottomBar.classList.remove("action");
+    bottomBar.onclick=null;
+  }
+});
+
+/* SELECTOR */
+function mostrarSelector(pedidos){
+  estadoOverlay.style.display="flex";
+  selectPersona.style.display="block";
+  estadoView.style.display="none";
+  personList.innerHTML="";
+  pedidos.forEach(p=>{
+    const nombre=p.split(" · ")[1].replace(" 🍔","");
+    const btn=document.createElement("button");
+    btn.className="personBtn";
+    btn.textContent=nombre;
+    btn.onclick=async()=>{
+      pedidoActual=p;
+      const snap=await get(ref(db,"mesas/"+p));
+      mostrarEstado(nombre,snap.val());
+    };
+    personList.appendChild(btn);
+  });
+}
+
+/* ESTADO */
+function mostrarEstado(nombre,data){
+  selectPersona.style.display="none";
+  estadoView.style.display="block";
+  estadoNombre.innerText=`${nombre} · ${MESA}`;
+  spinner.style.display="none";
+  avisadorBox.style.display="none";
+  document.body.classList.remove("avisadorActivo");
+
+  const min=(Date.now()-data.timestamp)/60000;
+
+  if(data.estado==="pendiente"){
+    estadoIcon.innerHTML="⏳";
+    estadoTexto.innerHTML="PENDIENTE DE PAGO";
+    estadoSub.innerHTML="Acércate a barra cuando quieras 😊";
+  }
+
+  if(data.estado==="preparando"){
+    estadoIcon.innerHTML="🍔";
+    spinner.style.display="block";
+    if(min<10){
+      estadoTexto.innerHTML="PREPARANDO TU PEDIDO";
+      estadoSub.innerHTML="Estamos manos a la plancha 👨‍🍳";
+    }else if(min<20){
+      estadoTexto.innerHTML="YA CASI ESTÁ";
+      estadoSub.innerHTML="Sale ya mismo 🔥";
+    }else{
+      estadoTexto.innerHTML="UN POCO DE RETRASO";
+      estadoSub.innerHTML="Gracias por la paciencia 💛";
+    }
+  }
+
+  if(data.estado==="listo"){
+    estadoIcon.innerHTML="🔔";
+    estadoTexto.innerHTML="TU PEDIDO ESTÁ LISTO";
+    estadoSub.innerHTML="👉 Ven a recogerlo a barra";
+
+    if(avisadorActivo){
+      beep.currentTime=0; beep.play();
+      vibrarAvisador();
+      document.body.classList.add("avisadorActivo");
+      avisadorBox.style.display="flex";
+    }
+  }
+}
+
+/* AVISADOR */
+window.activarAvisador = ()=>{
+  avisadorActivo = true;
+  beep.currentTime=0; beep.play();
+  vibrarAvisador();
+  document.body.classList.add("avisadorActivo");
+  avisadorBox.style.display="flex";
+  estadoIcon.innerHTML="🔔";
+  estadoTexto.innerHTML="AVISADOR PEAK";
+  estadoSub.innerHTML="Esperando tu pedido…";
+};
+
+/* AVISADOR FÍSICO */
+window.pedirAvisadorFisico = ()=>{
+  update(ref(db,"mesas/"+pedidoActual),{
+    avisadorSolicitado:true,
+    avisadorSalon:1
+  });
+  alert("Perfecto, pásate por barra a recoger el Avisador 1");
+};
+
+/* OCULTAR */
+window.ocultarEstado = ()=>{
+  estadoOverlay.style.display="none";
+  document.body.classList.remove("avisadorActivo");
+  avisadorBox.style.display="none";
+};
+</script>
+
+</body>
+</html>
