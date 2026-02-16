@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Notificaciones Push</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        .primary {
+            background: #ffc200;
+            color: #111;
+        }
+        .secondary {
+            background: #333;
+            color: white;
+        }
+        .success {
+            background: #00d26a;
+            color: white;
+        }
+        .error {
+            background: #ff5555;
+            color: white;
+        }
+        .log {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .log-success { color: green; }
+        .log-error { color: red; }
+        .log-info { color: blue; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔔 Test de Notificaciones Push</h1>
+        <p>Usa este archivo para probar las notificaciones push paso a paso</p>
+        
+        <button class="primary" onclick="testSoporte()">1. Verificar Soporte</button>
+        <button class="primary" onclick="testPermiso()">2. Solicitar Permiso</button>
+        <button class="secondary" onclick="testServiceWorker()">3. Registrar Service Worker</button>
+        <button class="secondary" onclick="testToken()">4. Obtener Token FCM</button>
+        <button class="success" onclick="testNotificacionLocal()">5. Test Notificación Local</button>
+        <button class="error" onclick="limpiarLog()">Limpiar Log</button>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <!-- Firebase Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+
+    <script>
+        const VAPID_KEY = "BP5asYEg0L_PMQWegCdOfkRRnpxp1Mlm5gaV85zytrcmLkVKXZhH2cSIapR1ZhpXfw2v_BbvERIYEtw-f53dEe8";
+        
+        const messagingConfig = {
+            apiKey: "AIzaSyBZ9s0BWMJRlJKOw7v8KArQ0hB9XLpxDdY",
+            authDomain: "salon1-e0e58.firebaseapp.com",
+            databaseURL: "https://salon1-e0e58-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "salon1-e0e58",
+            storageBucket: "salon1-e0e58.firebasestorage.app",
+            messagingSenderId: "831451913848",
+            appId: "1:831451913848:web:4cf086d55bcf89b1c4f3db"
+        };
+
+        let messaging = null;
+        let swRegistration = null;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function limpiarLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function testSoporte() {
+            log('=== VERIFICANDO SOPORTE ===', 'info');
+            
+            if ('serviceWorker' in navigator) {
+                log('✅ Service Workers soportados', 'success');
+            } else {
+                log('❌ Service Workers NO soportados', 'error');
+                return;
+            }
+
+            if ('PushManager' in window) {
+                log('✅ Push API soportada', 'success');
+            } else {
+                log('❌ Push API NO soportada', 'error');
+                return;
+            }
+
+            if ('Notification' in window) {
+                log('✅ Notification API soportada', 'success');
+                log(`Estado actual del permiso: ${Notification.permission}`, 'info');
+            } else {
+                log('❌ Notification API NO soportada', 'error');
+            }
+        }
+
+        async function testPermiso() {
+            log('=== SOLICITANDO PERMISO ===', 'info');
+            
+            try {
+                const permission = await Notification.requestPermission();
+                
+                if (permission === 'granted') {
+                    log('✅ PERMISO CONCEDIDO', 'success');
+                } else if (permission === 'denied') {
+                    log('❌ PERMISO DENEGADO', 'error');
+                } else {
+                    log('⚠️ PERMISO NO CONCEDIDO (default)', 'error');
+                }
+            } catch (error) {
+                log(`❌ Error al solicitar permiso: ${error.message}`, 'error');
+            }
+        }
+
+        async function testServiceWorker() {
+            log('=== REGISTRANDO SERVICE WORKER ===', 'info');
+            
+            try {
+                swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                log('✅ Service Worker registrado', 'success');
+                log(`Scope: ${swRegistration.scope}`, 'info');
+                
+                // Esperar a que esté ready
+                await navigator.serviceWorker.ready;
+                log('✅ Service Worker ready', 'success');
+                
+            } catch (error) {
+                log(`❌ Error al registrar Service Worker: ${error.message}`, 'error');
+            }
+        }
+
+        async function testToken() {
+            log('=== OBTENIENDO TOKEN FCM ===', 'info');
+            
+            if (!swRegistration) {
+                log('⚠️ Primero registra el Service Worker', 'error');
+                return;
+            }
+
+            try {
+                // Inicializar Firebase Messaging
+                if (!messaging) {
+                    log('Inicializando Firebase Messaging...', 'info');
+                    const messagingApp = firebase.initializeApp(messagingConfig, 'test-app');
+                    messaging = firebase.messaging(messagingApp);
+                    log('✅ Firebase Messaging inicializado', 'success');
+                }
+
+                // Obtener token
+                log('Solicitando token FCM...', 'info');
+                const token = await messaging.getToken({
+                    vapidKey: VAPID_KEY,
+                    serviceWorkerRegistration: swRegistration
+                });
+
+                if (token) {
+                    log('✅ TOKEN FCM OBTENIDO', 'success');
+                    log(`Token: ${token.substring(0, 50)}...`, 'info');
+                    
+                    // Copiar al clipboard
+                    try {
+                        await navigator.clipboard.writeText(token);
+                        log('✅ Token copiado al portapapeles', 'success');
+                    } catch (e) {
+                        log('⚠️ No se pudo copiar al portapapeles', 'error');
+                    }
+                } else {
+                    log('❌ No se pudo obtener el token', 'error');
+                }
+            } catch (error) {
+                log(`❌ Error al obtener token: ${error.message}`, 'error');
+                console.error('Error completo:', error);
+            }
+        }
+
+        async function testNotificacionLocal() {
+            log('=== TEST NOTIFICACIÓN LOCAL ===', 'info');
+            
+            if (Notification.permission !== 'granted') {
+                log('❌ Primero debes conceder el permiso de notificaciones', 'error');
+                return;
+            }
+
+            try {
+                const notification = new Notification('🍔 Test de Notificación', {
+                    body: 'Esta es una notificación de prueba local',
+                    icon: 'https://via.placeholder.com/192',
+                    badge: 'https://via.placeholder.com/72',
+                    vibrate: [200, 100, 200],
+                    requireInteraction: false
+                });
+
+                log('✅ Notificación local enviada', 'success');
+                
+                notification.onclick = () => {
+                    log('👆 Usuario hizo click en la notificación', 'info');
+                };
+            } catch (error) {
+                log(`❌ Error al crear notificación: ${error.message}`, 'error');
+            }
+        }
+
+        // Log inicial
+        log('🚀 Página de test cargada', 'success');
+        log('Haz click en los botones en orden para probar las notificaciones', 'info');
+    </script>
+</body>
+</html>
